@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#131b15">
+  <title>无畏士兵 · Fearless Soldier</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231a291c'/%3E%3Cpath d='M8 9h16v9H8zm4 11h8v8h-8z' fill='%239bb77e'/%3E%3Cpath d='M11 12h10v5H11z' fill='%23edc68b'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="app">
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="无畏士兵首页"><span class="brand-mark">✦</span><div><b>无畏士兵</b><span>FEARLESS SOLDIER</span></div></a>
+      <div class="mission-label"><span class="live-dot"></span> 单人行动 <span class="divider">/</span> 森林拓荒</div>
+      <button id="pause-button" class="quiet-button">暂停 <kbd>ESC</kbd></button>
+    </header>
+    <main class="layout">
+      <section class="field-panel" aria-label="游戏区域">
+        <div class="panel-bar"><span><i class="tiny-square"></i> 荒野行动区</span><span id="coordinates">X 100 · Y 100</span></div>
+        <div class="field-wrap">
+          <canvas id="world" width="648" height="648" aria-label="9乘9格游戏视野，用方向键移动，空格攻击"></canvas>
+          <div class="field-corner top-left"></div><div class="field-corner bottom-right"></div>
+          <div id="boss-hud" class="boss-hud" hidden><div><span>荒野领主</span><span id="boss-value"></span></div><div class="boss-track"><div id="boss-fill"></div></div></div>
+          <div id="overlay" class="overlay">
+            <div class="overlay-card">
+              <div id="overlay-tag" class="eyebrow">OPERATION · 001</div>
+              <div class="hero-emblem"><canvas id="hero" width="96" height="96"></canvas></div>
+              <h1 id="overlay-title">无畏士兵</h1>
+              <p id="overlay-copy">从一片空地出发，<br>用手中的刀，开辟你的生路。</p>
+              <div id="result-stats" class="result-stats" hidden></div>
+              <button id="primary-button" class="primary-button">开始拓荒 <span>→</span></button>
+              <button id="new-button" class="secondary-button" hidden>重新开局</button>
+              <div id="overlay-controls" class="overlay-controls"><span><kbd>W A S D</kbd> 移动</span><span><kbd>SPACE</kbd> 挥刀</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field-footer"><span><i class="live-dot"></i> 视野 9 × 9</span><span>木头挡路，不挡视线</span><span id="save-state">准备出发</span></div>
+      </section>
+      <aside class="sidebar">
+        <section class="status-panel panel">
+          <div class="section-heading"><h2>士兵状态</h2><span id="mission-time">00:00</span></div>
+          <div class="soldier-row"><canvas id="portrait" width="64" height="64"></canvas><div><b>拓荒者</b><span id="status-label">等待出发</span></div><span class="rank-tag">01</span></div>
+          <div class="health-label"><span>生命值</span><b id="health-value">100 <small>/ 100</small></b></div>
+          <div class="health-track"><div id="health-fill"></div></div>
+          <div class="weapon-block"><canvas id="weapon-icon" width="48" height="48"></canvas><div><span class="micro-label">当前装备</span><b id="weapon-name">野战小刀</b><span id="weapon-description">伤害 15 · 前方 1 格</span></div><span id="weapon-tier" class="tier">I</span></div>
+        </section>
+        <section class="map-panel panel">
+          <div class="section-heading"><h2>探索地图</h2><span class="micro-label">LOCAL AREA</span></div>
+          <div class="minimap-wrap"><canvas id="minimap" width="232" height="176" aria-label="附近已探索地形小地图"></canvas><span class="north-mark">N ↑</span></div>
+          <div class="map-legend"><span><i class="legend-player"></i>你</span><span><i class="legend-ground"></i>已探索</span><span><i class="legend-unknown"></i>未知</span></div>
+          <div class="explore-label"><span>世界探索</span><b id="explored-value">0.2%</b></div><div class="explore-track"><div id="explore-fill"></div></div>
+        </section>
+        <section class="log-panel panel">
+          <div class="section-heading"><h2>行动记录</h2><span class="micro-label">FIELD NOTES</span></div>
+          <div class="stat-grid"><div><b id="tree-count">0</b><span>木头清除</span></div><div><b id="kill-count">0</b><span>敌人击败</span></div></div>
+          <div class="objective"><span class="objective-mark">◇</span><div><b>找到并击败荒野领主</b><p>穿过森林，寻找更强的武器。<br>未知的空地，也可能藏着危险。</p></div></div>
+        </section>
+        <section class="controls-panel"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> 移动</span><span><kbd>SPACE</kbd> 攻击</span><span><kbd>ESC</kbd> 暂停</span></section>
+      </aside>
+    </main>
+    <footer class="bottom-bar"><div><span class="radio-icon">⌁</span><span id="message" role="status" aria-live="polite">行动简报：一把小刀，一片未知的森林。</span></div><span class="world-size">200 × 200 · 随机世界</span></footer>
+    <p class="desktop-note">本作使用键盘操作，请在电脑浏览器游玩。</p>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
