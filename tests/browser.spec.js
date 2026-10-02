@@ -28,6 +28,10 @@ async function fixture(page, kind) {
       g.rectangle(51, 49, 5, 3);
       g.items = [{ x: 52, y: 51, type: 'food' }, { x: 54, y: 49, type: 'weapon', level: 1 }];
     }
+    if (kind === 'roam') {
+      g.tiles.fill(1);g.rectangle(49,49,3,3);g.rectangle(53,49,2,3);g.items=[];
+      g.enemies=[{id:0,x:53,y:50,type:'zombie',hp:45,active:false,cooldown:0,windup:null,wanderCooldown:.1}];
+    }
     localStorage.setItem(key, g.serialize());
   }, { key: KEY, kind });
   await page.reload();
@@ -231,4 +235,31 @@ test('legacy map save stays untouched and new run uses version 2 with 10000 tile
   await page.getByRole('button',{name:'开始拓荒'}).click();
   const saves=await page.evaluate(key=>({old:localStorage.getItem('fearless-soldier.save.v1'),current:JSON.parse(localStorage.getItem(key))}),KEY);
   expect(saves.old).toBe(old);expect(saves.current.version).toBe(2);expect(saves.current.size).toBe(100);expect(saves.current.tiles).toHaveLength(10000);
+});
+
+test('visible monster patrols behind wood without aggro and keeps animation across reload',async({page})=>{
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await fixture(page,'roam');
+  await page.evaluate(async()=>{
+    const {Renderer,visualPosition}=await import('/src/render.js');const world=Renderer.prototype.world;
+    window.patrolFrames=[];
+    Renderer.prototype.world=function(game,...args){world.call(this,game,...args);const e=game.enemies[0];window.patrolFrames.push({visual:visualPosition(e),x:e.x,y:e.y,active:e.active,facing:e.facing,moving:!!e.move,floor:game.floor(e.x,e.y)});};
+  });
+  await page.waitForTimeout(350);
+  const frames=await page.evaluate(()=>window.patrolFrames);
+  expect(frames.some(f=>f.moving)).toBe(true);
+  expect(new Set(frames.map(f=>`${f.visual.x.toFixed(3)},${f.visual.y.toFixed(3)}`)).size).toBeGreaterThan(2);
+  for(const frame of frames){expect(frame.active).toBe(false);expect(frame.floor).toBe(true);expect(frame.x).toBeGreaterThanOrEqual(53);expect(frame.x).toBeLessThanOrEqual(54);}
+  await expect(page.locator('#health-value')).toContainText('100');
+  await page.screenshot({path:'artifacts/monster-patrol.png'});
+  await page.keyboard.press('Escape');
+  const before=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).enemies[0],KEY);
+  await page.reload();
+  expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).enemies[0],KEY)).toEqual(before);
+  await page.getByRole('button',{name:'继续探索'}).click();await page.waitForTimeout(250);
+  await page.keyboard.press('Escape');
+  const after=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).enemies[0],KEY);
+  expect(after.active).toBe(false);expect(after.hp).toBe(45);
+  expect(after.move?.elapsed ?? 1).toBeGreaterThan(before.move?.elapsed ?? 0);
+  expect(errors).toEqual([]);
 });

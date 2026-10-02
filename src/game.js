@@ -1,4 +1,4 @@
-export const CONFIG = { size: 100, vision: 4, maxHp: 100, moveTime: 0.14, attackTime: 0.24, foodHeal: 35, aggro: 4, leash: 8, bossHp: 620 };
+export const CONFIG = { size: 100, vision: 4, maxHp: 100, moveTime: 0.14, attackTime: 0.24, foodHeal: 35, aggro: 4, leash: 8, bossHp: 620, wanderRestMin: 0.6, wanderRestMax: 1.6, wanderSpeedScale: 1.25 };
 export const WEAPONS = [
   { name: '野战小刀', short: '小刀', damage: 15, depth: 1, width: 1 },
   { name: '精钢长刀', short: '长刀', damage: 28, depth: 1, width: 3 },
@@ -80,7 +80,7 @@ export class Game {
       const k = this.index(x, y);
       if (!this.floor(x, y) || occupied.has(k) || distance({ x, y }, this.player) < 5 || distance({ x, y }, this.boss) <= 5) return false;
       occupied.add(k);
-      if (ENEMIES[type]) this.enemies.push({ id: this.enemies.length, x, y, type, hp: ENEMIES[type].hp, active: false, cooldown: this.rng() * 0.6, windup: null, ...data });
+      if (ENEMIES[type]) this.enemies.push({ id: this.enemies.length, x, y, type, hp: ENEMIES[type].hp, active: false, facing: 'down', cooldown: this.rng() * 0.6, windup: null, ...data });
       else this.items.push({ x, y, type, ...data });
       return true;
     };
@@ -219,15 +219,31 @@ export class Game {
     }
     return null;
   }
+  wanderEnemy(e, dt) {
+    if (e.move) return;
+    const rest = () => CONFIG.wanderRestMin + this.rng() * (CONFIG.wanderRestMax - CONFIG.wanderRestMin);
+    e.wanderCooldown = (e.wanderCooldown ?? rest()) - dt;
+    if (e.wanderCooldown > 0) return;
+    const options = Object.entries(DIRECTIONS).map(([facing, [dx, dy]]) => ({ facing, x: e.x + dx, y: e.y + dy }))
+      .filter(next => this.floor(next.x, next.y) && !this.occupied(next.x, next.y, e) && !(next.x === this.player.x && next.y === this.player.y));
+    const forward = options.find(next => next.facing === e.facing);
+    const next = forward && this.rng() < 0.5 ? forward : options[Math.floor(this.rng() * options.length)];
+    if (next) {
+      e.move = { x: e.x, y: e.y, elapsed: 0, duration: ENEMIES[e.type].speed * CONFIG.wanderSpeedScale };
+      e.x = next.x; e.y = next.y; e.facing = next.facing;
+    }
+    e.wanderCooldown = rest();
+  }
   updateEnemies(dt) {
     for (const e of this.enemies) {
       const spec = ENEMIES[e.type], d = distance(e, this.player);
-      if (e.active && d > CONFIG.leash) { e.active = false; e.windup = null; e.move = null; continue; }
-      if (!e.active) {
-        if (d > CONFIG.aggro || !this.pathStep(e, this.player)) continue;
-        e.active = true;
-      }
       if (e.move) { e.move.elapsed += dt; if (e.move.elapsed >= e.move.duration) e.move = null; }
+      if (e.active && d > CONFIG.leash) { e.active = false; e.windup = null; e.wanderCooldown = CONFIG.wanderRestMin + this.rng() * (CONFIG.wanderRestMax - CONFIG.wanderRestMin); continue; }
+      if (!e.active) {
+        if (d > CONFIG.aggro || !this.pathStep(e, this.player)) { this.wanderEnemy(e, dt); continue; }
+        e.active = true;
+        e.cooldown = Math.min(e.cooldown, 0.1);
+      }
       if (e.windup) {
         e.windup.remaining -= dt;
         if (e.windup.remaining <= 0) {
@@ -248,6 +264,7 @@ export class Game {
         const next = this.pathStep(e, this.player);
         if (next && !this.occupied(next.x, next.y, e) && !(next.x === this.player.x && next.y === this.player.y)) {
           e.move = { x: e.x, y: e.y, elapsed: 0, duration: spec.speed * 0.75 };
+          e.facing = Object.entries(DIRECTIONS).find(([, [dx, dy]]) => e.x + dx === next.x && e.y + dy === next.y)[0];
           e.x = next.x; e.y = next.y;
         }
         e.cooldown = spec.speed;
@@ -320,7 +337,7 @@ export class Game {
     const validMotion = m => !m || validPoint(m) && nonnegative(m.elapsed) && Number.isFinite(m.duration) && m.duration > 0;
     if (d.version !== 2 || d.size !== CONFIG.size || d.tiles?.length !== CONFIG.size ** 2 || d.seen?.length !== CONFIG.size ** 2 || !validPoint(d.player) || !Number.isFinite(d.player.hp) || d.player.hp <= 0 || d.player.hp > CONFIG.maxHp || !WEAPONS[d.player.weapon] || !DIRECTIONS[d.player.facing] || !Array.isArray(d.enemies) || !Array.isArray(d.items) || !validPoint(d.boss) || !Number.isFinite(d.boss.hp) || !Number.isFinite(d.stats?.time) || !['playing', 'paused', 'won'].includes(d.status)) throw new Error('无效或不兼容的存档');
     if (d.tiles.some(t => t !== 0 && t !== 1) || d.seen.some(t => t !== 0 && t !== 1) || d.enemies.some(e => !validPoint(e) || !ENEMIES[e.type] || !Number.isFinite(e.hp)) || d.items.some(i => !validPoint(i) || !['food', 'weapon'].includes(i.type) || i.type === 'weapon' && !WEAPONS[i.level])) throw new Error('存档内容损坏');
-    if (!validMotion(d.move) || !nonnegative(d.stats.time) || !nonnegative(d.stats.kills) || !nonnegative(d.stats.trees) || !nonnegative(d.stats.explored) || d.stats.explored > CONFIG.size ** 2 || !nonnegative(d.attackCooldown) || !nonnegative(d.invincible) || d.boss.maxHp !== CONFIG.bossHp || d.boss.hp < 0 || d.boss.hp > CONFIG.bossHp || !validWarning(d.boss.windup) || !Number.isFinite(d.boss.cooldown) || !Number.isInteger(d.boss.phase) || d.enemies.some(e => e.hp <= 0 || e.hp > ENEMIES[e.type].hp || !validWarning(e.windup) || !validMotion(e.move) || !Number.isFinite(e.cooldown))) throw new Error('存档状态损坏');
+    if (!validMotion(d.move) || !nonnegative(d.stats.time) || !nonnegative(d.stats.kills) || !nonnegative(d.stats.trees) || !nonnegative(d.stats.explored) || d.stats.explored > CONFIG.size ** 2 || !nonnegative(d.attackCooldown) || !nonnegative(d.invincible) || d.boss.maxHp !== CONFIG.bossHp || d.boss.hp < 0 || d.boss.hp > CONFIG.bossHp || !validWarning(d.boss.windup) || !Number.isFinite(d.boss.cooldown) || !Number.isInteger(d.boss.phase) || d.enemies.some(e => e.hp <= 0 || e.hp > ENEMIES[e.type].hp || !validWarning(e.windup) || !validMotion(e.move) || !Number.isFinite(e.cooldown) || e.facing !== undefined && !DIRECTIONS[e.facing] || e.wanderCooldown !== undefined && !nonnegative(e.wanderCooldown))) throw new Error('存档状态损坏');
     const g = Object.create(Game.prototype);
     Object.assign(g, d, { size: CONFIG.size, tiles: Uint8Array.from(d.tiles), seen: Uint8Array.from(d.seen), rng: random(d.seed ^ Math.floor(d.stats.time * 100)), effects: [], events: [], move: d.move || null, slash: null, impactPause: 0 });
     g.status = d.status === 'won' ? 'won' : 'paused';

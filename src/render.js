@@ -168,7 +168,7 @@ export class Renderer {
     const drawEntity = (entity,type,isPlayer=false,isBoss=false) => {
       if (!isPlayer && !inView(entity.x,entity.y)) return;
       const visual=isPlayer?camera:visualPosition(entity), a=isPlayer?{...center}:project(visual.x,visual.y);
-      let facing=isPlayer?(game.slash?.facing||p.facing):Math.abs(p.x-entity.x)>Math.abs(p.y-entity.y)?(p.x<entity.x?'left':'right'):(p.y<entity.y?'up':'down');
+      let facing=isPlayer?(game.slash?.facing||p.facing):!entity.active?(entity.facing||'down'):Math.abs(p.x-entity.x)>Math.abs(p.y-entity.y)?(p.x<entity.x?'left':'right'):(p.y<entity.y?'up':'down');
       const windup=entity.windup, strike=entity.strike, recoil=entity.reaction;
       if (!isPlayer && (strike || windup?.cells.length)) {
         const dx = strike ? strike.dx : windup.cells[0].x - entity.x;

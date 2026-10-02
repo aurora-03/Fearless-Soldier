@@ -98,10 +98,11 @@ test('telegraphed enemy attack damages player and grants hit protection', () => 
   tick(g, .95); assert.equal(g.player.hp, 90);
   g.hurt(22); assert.equal(g.player.hp, 90);
 });
-test('monster disengages at last position without healing; never respawns', () => {
+test('monster disengages without healing, resumes wandering, and never respawns', () => {
   const g = sandbox(), e = monster(51, 50); e.hp = 7; e.active = true; g.enemies = [e];
-  g.player.x = 70; tick(g, 2); assert.equal(e.x, 51); assert.equal(e.hp, 7); assert.equal(e.active, false);
-  g.player.x = 50; g.player.facing = 'right'; g.attack(); assert.equal(g.enemies.length, 0); assert.equal(g.stats.kills, 1);
+  g.player.x = 70; g.update(.05); assert.equal(e.x, 51); assert.equal(e.hp, 7); assert.equal(e.active, false);
+  tick(g, 2); assert.equal(e.hp, 7); assert.equal(e.active, false);
+  g.player.x = e.x - 1; g.player.y = e.y; g.player.facing = 'right'; g.attack(); assert.equal(g.enemies.length, 0); assert.equal(g.stats.kills, 1);
   tick(g, 15); assert.equal(g.enemies.length, 0);
 });
 test('kills can drop food and both exploration and kills yield weapons', () => {
