@@ -19,9 +19,10 @@
     <div class="top-controls"><button id="sound-button" class="icon-button" aria-label="关闭音效" title="音效">♪</button><button id="pause-button" class="icon-button" aria-label="暂停游戏" title="Esc 暂停">Ⅱ</button></div>
     <div id="boss-hud" class="boss-hud" hidden><div><span>荒野领主</span><span id="boss-value"></span></div><div class="boss-track"><div id="boss-fill"></div></div></div>
     <section class="status-hud" aria-label="士兵状态与当前装备">
-      <div class="soldier-row"><canvas id="portrait" width="64" height="64"></canvas><div><b>拓荒者</b><span id="status-label">等待出发</span></div><time id="mission-time">00:00</time></div>
+      <div class="soldier-row"><canvas id="portrait" width="64" height="64"></canvas><div><b>拓荒者 <span id="level-badge" class="level-badge">LV.1</span></b><span id="status-label">等待出发</span></div><time id="mission-time">00:00</time></div>
       <div class="health-label"><span>生命值</span><b id="health-value">100 <small>/ 100</small></b></div><div class="health-track"><div id="health-fill"></div></div>
-      <div class="weapon-block"><canvas id="weapon-icon" width="48" height="48"></canvas><div><span class="micro-label">当前装备</span><b id="weapon-name">野战小刀</b><span id="weapon-description">伤害 15 · 前方 1 格</span></div><span id="weapon-tier" class="tier">I</span></div>
+      <div class="xp-label"><span>经验</span><span id="xp-value">0 / 60</span></div><div class="xp-track"><div id="xp-fill"></div></div>
+      <div class="weapon-block"><canvas id="weapon-icon" width="48" height="48"></canvas><div><span class="micro-label">当前装备</span><b id="weapon-name">野战小刀</b><span id="weapon-description">伤害 15 · 前方 1 格</span><span id="attack-rate">攻速 4.17 次/秒</span></div><span id="weapon-tier" class="tier">I</span></div>
       <div class="compact-stats"><span>拓荒 <b id="tree-count">0</b></span><span>击败 <b id="kill-count">0</b></span><span id="save-state">准备出发</span></div>
     </section>
     <div id="message" class="sr-only" role="status" aria-live="polite">向树林深处前进。</div>
@@ -34,6 +35,11 @@
         <p id="overlay-copy">从一片空地出发，<br>用手中的刀，开辟你的生路。</p>
         <p id="version-note" class="version-note" hidden></p>
         <div id="result-stats" class="result-stats" hidden></div>
+        <div id="upgrade-options" class="upgrade-options" hidden>
+          <button id="health-upgrade" class="upgrade-card"><kbd>1</kbd><div><b>强健体魄</b><span>生命上限 +20，恢复 20 点生命</span><strong id="health-preview">100 → 120 生命上限</strong></div><i>＋</i></button>
+          <button id="speed-upgrade" class="upgrade-card"><kbd>2</kbd><div><b>迅捷挥砍</b><span>提升攻击速度</span><strong id="speed-preview">4.17 → 4.67 次/秒</strong></div><i>↗</i></button>
+          <p id="upgrade-hint">选择一项强化后继续战斗 · Esc 暂停</p>
+        </div>
         <button id="primary-button" class="primary-button">开始拓荒 <span>→</span></button>
         <button id="new-button" class="secondary-button" hidden>重新开局</button>
         <div id="overlay-controls" class="overlay-controls"><span><kbd>W A S D</kbd> 移动</span><span><kbd>SPACE</kbd> 挥刀</span><span><kbd>ESC</kbd> 暂停</span></div>

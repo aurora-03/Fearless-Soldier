@@ -30,7 +30,7 @@ export class Sound {
     if(event==='hit') tone(120,45,.12,.15,'square');
     if(event==='chop') tone(210,65,.09,.1,'triangle');
     if(event==='hurt') tone(180,60,.16,.12,'sawtooth');
-    if(event==='heal'||event==='upgrade') {tone(440,440,.1,.06);tone(660,660,.14,.06,'triangle',.08);}
+    if(['heal','upgrade','growth','levelup'].includes(event)) {tone(440,440,.1,.06);tone(660,660,.14,.06,'triangle',.08);}
     if(event==='won') {tone(440,440,.2,.07);tone(554,554,.2,.07,'triangle',.16);tone(660,660,.35,.07,'triangle',.32);}
   }
 }

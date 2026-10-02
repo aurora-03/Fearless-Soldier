@@ -32,6 +32,12 @@ async function fixture(page, kind) {
       g.tiles.fill(1);g.rectangle(49,49,3,3);g.rectangle(53,49,2,3);g.items=[];
       g.enemies=[{id:0,x:53,y:50,type:'zombie',hp:45,active:false,cooldown:0,windup:null,wanderCooldown:.1}];
     }
+    if (['growth','experience','growthdeath'].includes(kind)) {
+      g.items=[];g.player.facing='right';g.player.hp=80;g.player.xp=kind==='growth'?40:0;
+      g.enemies=[{id:0,x:51,y:50,type:'zombie',hp:15,active:false,cooldown:99,windup:null}];
+      if(kind==='growthdeath'){g.gainExperience(60);g.chooseUpgrade('health');g.player.hp=10;g.enemies[0].hp=45;g.enemies[0].active=true;g.enemies[0].cooldown=0;}
+    }
+    if(kind==='multigrowth'){g.enemies=[];g.items=[];g.gainExperience(220);}
     localStorage.setItem(key, g.serialize());
   }, { key: KEY, kind });
   await page.reload();
@@ -262,4 +268,55 @@ test('visible monster patrols behind wood without aggro and keeps animation acro
   expect(after.active).toBe(false);expect(after.hp).toBe(45);
   expect(after.move?.elapsed ?? 1).toBeGreaterThan(before.move?.elapsed ?? 0);
   expect(errors).toEqual([]);
+});
+
+test('actual kill updates experience HUD without leveling before the threshold',async({page})=>{
+  await fixture(page,'experience');await page.keyboard.press('Space');
+  await expect(page.locator('#xp-value')).toHaveText('20 / 60');await expect(page.locator('#level-badge')).toHaveText('LV.1');
+  await expect(page.locator('#kill-count')).toHaveText('1');await expect(page.locator('#overlay')).toBeHidden();
+});
+
+test('level-up freezes gameplay and health choice updates cap, bar and persisted progress',async({page})=>{
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await fixture(page,'growth');await page.keyboard.press('Space');
+  await expect(page.locator('#overlay-title')).toHaveText('升级至 LV.2');
+  await expect(page.locator('#upgrade-options')).toBeVisible();await expect(page.locator('#xp-value')).toHaveText('0 / 90');
+  const time=await page.locator('#mission-time').textContent(),coords=await page.locator('#coordinates').textContent();
+  await page.keyboard.press('ArrowRight');await page.waitForTimeout(300);
+  await expect(page.locator('#mission-time')).toHaveText(time);await expect(page.locator('#coordinates')).toHaveText(coords);
+  await page.screenshot({path:'artifacts/level-up.png'});
+  await page.locator('#health-upgrade').click();await expect(page.locator('#overlay')).toBeHidden();
+  await expect(page.locator('#health-value')).toHaveText('100 / 120');await expect(page.locator('#level-badge')).toHaveText('LV.2');
+  expect(await page.locator('#health-fill').evaluate(el=>parseFloat(el.style.width))).toBeCloseTo(83.333,2);
+  const p=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).player,KEY);
+  expect(p).toMatchObject({level:2,xp:0,maxHp:120,hp:100,healthUpgrades:1,pendingUpgrades:0});
+  await page.screenshot({path:'artifacts/growth-health.png'});
+  await page.reload();await page.getByRole('button',{name:'继续探索'}).click();
+  await expect(page.locator('#health-value')).toHaveText('100 / 120');await expect(page.locator('#level-badge')).toHaveText('LV.2');expect(errors).toEqual([]);
+});
+
+test('speed choice increases displayed attack rate and saves the actual faster cooldown',async({page})=>{
+  await fixture(page,'growth');await page.keyboard.press('Space');
+  await expect(page.locator('#speed-preview')).toContainText('4.17 → 4.67');
+  await page.locator('#speed-upgrade').click();await expect(page.locator('#attack-rate')).toHaveText('攻速 4.67 次/秒');
+  const data=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),KEY);
+  expect(data.player.speedUpgrades).toBe(1);expect(data.player.maxHp).toBe(100);expect(data.attackCooldown).toBeLessThan(.24);
+  await page.reload();await page.getByRole('button',{name:'继续探索'}).click();await expect(page.locator('#attack-rate')).toHaveText('攻速 4.67 次/秒');
+});
+
+test('unspent multi-level choices survive pause and reload and support keyboard selection',async({page})=>{
+  await fixture(page,'multigrowth');await expect(page.locator('#overlay-title')).toHaveText('升级至 LV.3');await expect(page.locator('#overlay-copy')).toContainText('2 次');
+  await page.keyboard.press('Escape');await expect(page.locator('#overlay-title')).toHaveText('稍作休整');
+  await page.reload();await page.getByRole('button',{name:'继续探索'}).click();await expect(page.locator('#upgrade-options')).toBeVisible();
+  await page.keyboard.press('1');await expect(page.locator('#overlay-copy')).toContainText('1 次');
+  await page.keyboard.press('2');await expect(page.locator('#overlay')).toBeHidden();await expect(page.locator('#xp-value')).toHaveText('70 / 120');
+  const p=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).player,KEY);expect(p).toMatchObject({level:3,maxHp:120,healthUpgrades:1,speedUpgrades:1,pendingUpgrades:0});
+});
+
+test('death removes run growth and restart begins with base health, level and speed',async({page})=>{
+  await fixture(page,'growthdeath');await expect(page.locator('#level-badge')).toHaveText('LV.2');
+  await expect(page.locator('#overlay-title')).toHaveText('倒在了征途');
+  expect(await page.evaluate(key=>localStorage.getItem(key),KEY)).toBeNull();
+  await page.getByRole('button',{name:'再次出发'}).click();await expect(page.locator('#level-badge')).toHaveText('LV.1');
+  await expect(page.locator('#xp-value')).toHaveText('0 / 60');await expect(page.locator('#health-value')).toHaveText('100 / 100');await expect(page.locator('#attack-rate')).toHaveText('攻速 4.17 次/秒');
 });

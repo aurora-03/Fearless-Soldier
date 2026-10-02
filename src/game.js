@@ -10,6 +10,7 @@ export const ENEMIES = {
   orc: { name: '兽人', hp: 100, damage: 22, speed: 0.7, windup: 1, color: '#c08258' },
 };
 export const DIRECTIONS = { up: [0, -1], right: [1, 0], down: [0, 1], left: [-1, 0] };
+export const PROGRESSION = { xpBase: 60, xpPerLevel: 30, healthBonus: 20, speedBonus: 0.12, minAttackTime: 0.1, xp: { zombie: 20, wolf: 25, orc: 45, boss: 150 } };
 export function random(seed) {
   let a = seed >>> 0;
   return () => { a += 0x6D2B79F5; let t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -24,7 +25,7 @@ export class Game {
     this.size = CONFIG.size;
     this.tiles = new Uint8Array(this.size * this.size).fill(1);
     this.seen = new Uint8Array(this.tiles.length);
-    this.player = { x: this.size / 2, y: this.size / 2, hp: CONFIG.maxHp, weapon: 0, facing: 'down' };
+    this.player = { x: this.size / 2, y: this.size / 2, hp: CONFIG.maxHp, maxHp: CONFIG.maxHp, weapon: 0, facing: 'down', level: 1, xp: 0, healthUpgrades: 0, speedUpgrades: 0, pendingUpgrades: 0 };
     this.enemies = [];
     this.items = [];
     this.status = 'playing';
@@ -136,11 +137,42 @@ export class Game {
     }
     return cells;
   }
+  xpToNextLevel() { return PROGRESSION.xpBase + (this.player.level - 1) * PROGRESSION.xpPerLevel; }
+  attackInterval(speedUpgrades = this.player.speedUpgrades) {
+    return Math.max(PROGRESSION.minAttackTime, CONFIG.attackTime / (1 + speedUpgrades * PROGRESSION.speedBonus));
+  }
+  gainExperience(amount) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) return;
+    const p = this.player;
+    p.xp += amount;
+    while (p.xp >= this.xpToNextLevel()) {
+      p.xp -= this.xpToNextLevel(); p.level++; p.pendingUpgrades++;
+      this.events.push('levelup');
+    }
+    if (p.pendingUpgrades && this.status === 'playing') this.status = 'levelup';
+  }
+  chooseUpgrade(type) {
+    const p = this.player;
+    if (this.status !== 'levelup' || !p.pendingUpgrades || !['health', 'speed'].includes(type)) return false;
+    if (type === 'speed' && this.attackInterval() <= PROGRESSION.minAttackTime) return false;
+    if (type === 'health') {
+      p.healthUpgrades++; p.maxHp += PROGRESSION.healthBonus; p.hp += PROGRESSION.healthBonus;
+      this.message = `强健体魄：生命上限提升至 ${p.maxHp}，恢复 ${PROGRESSION.healthBonus} 点生命。`;
+    } else {
+      p.speedUpgrades++;
+      this.attackCooldown = Math.min(this.attackCooldown, this.attackInterval());
+      this.message = `迅捷挥砍：攻速提升至 ${(1 / this.attackInterval()).toFixed(2)} 次/秒。`;
+    }
+    p.pendingUpgrades--; this.status = p.pendingUpgrades ? 'levelup' : 'playing';
+    this.events.push('growth');
+    return true;
+  }
   attack() {
     if (this.status !== 'playing' || this.attackCooldown > 0) return false;
     const cells = this.attackCells(), damage = WEAPONS[this.player.weapon].damage;
-    this.attackCooldown = CONFIG.attackTime;
-    this.slash = { cells, life: 0.22, duration: 0.22, facing: this.player.facing, weapon: this.player.weapon };
+    this.attackCooldown = this.attackInterval();
+    const duration = Math.min(0.22, this.attackInterval() * 0.92);
+    this.slash = { cells, life: duration, duration, facing: this.player.facing, weapon: this.player.weapon };
     let chopped = 0, hits = 0;
     for (const c of cells) {
       const k = this.index(c.x, c.y);
@@ -157,7 +189,7 @@ export class Game {
         this.boss.reaction = { remaining: 0.22, duration: 0.22, direction: DIRECTIONS[this.player.facing] };
         this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28 });
         this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55 });
-        if (!this.boss.hp) { this.stats.kills++; this.status = 'won'; this.message = '森林重归宁静。你击败了荒野领主！'; this.events.push('won'); }
+        if (!this.boss.hp) { this.stats.kills++; this.gainExperience(PROGRESSION.xp.boss); this.status = 'won'; this.message = '森林重归宁静。你击败了荒野领主！'; this.events.push('won'); }
       }
     }
     this.enemies = this.enemies.filter(e => e.hp > 0);
@@ -166,7 +198,12 @@ export class Game {
     return true;
   }
   kill(e) {
+    if (e.rewarded) return;
+    e.rewarded = true;
     this.stats.kills++;
+    const xp = PROGRESSION.xp[e.type];
+    this.gainExperience(xp);
+    this.effects.push({ x: e.x, y: e.y, kind: 'xp', text: `+${xp} EXP`, life: 0.85, duration: 0.85 });
     this.effects.push({ x: e.x, y: e.y, kind: 'death', type: e.type, life: 0.45, duration: 0.45 });
     if (this.rng() < 0.14) {
       this.items.push({ x: e.x, y: e.y, type: 'weapon', level: e.type === 'orc' && this.rng() < 0.65 ? 2 : 1 });
@@ -181,8 +218,8 @@ export class Game {
     for (const i of this.items) {
       if (i.x !== this.player.x || i.y !== this.player.y) { remaining.push(i); continue; }
       if (i.type === 'food') {
-        if (this.player.hp >= CONFIG.maxHp) { remaining.push(i); continue; }
-        const amount = Math.min(CONFIG.foodHeal, CONFIG.maxHp - this.player.hp);
+        if (this.player.hp >= this.player.maxHp) { remaining.push(i); continue; }
+        const amount = Math.min(CONFIG.foodHeal, this.player.maxHp - this.player.hp);
         this.player.hp += amount;
         this.message = `吃掉食物，恢复 ${amount} 点生命。`;
         this.effects.push({ x: i.x, y: i.y, text: `+${amount}`, kind: 'heal', life: 0.8 });
@@ -324,22 +361,24 @@ export class Game {
     this.updateEnemies(dt);
     if (this.status === 'playing') this.updateBoss(dt);
   }
-  pause() { if (this.status === 'playing') this.status = 'paused'; }
-  resume() { if (this.status === 'paused') this.status = 'playing'; }
+  pause() { if (['playing', 'levelup'].includes(this.status)) this.status = 'paused'; }
+  resume() { if (this.status === 'paused') this.status = this.player.pendingUpgrades ? 'levelup' : 'playing'; }
   serialize() {
     return JSON.stringify({ version: 2, size: this.size, seed: this.seed, tiles: Array.from(this.tiles), seen: Array.from(this.seen), player: this.player, move: this.move, enemies: this.enemies, items: this.items, boss: this.boss, stats: this.stats, status: this.status, message: this.message, attackCooldown: this.attackCooldown, invincible: this.invincible });
   }
   static restore(raw) {
     const d = JSON.parse(raw);
+    const player = d.player && { maxHp: CONFIG.maxHp, level: 1, xp: 0, healthUpgrades: 0, speedUpgrades: 0, pendingUpgrades: 0, ...d.player };
     const validPoint = p => p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x < CONFIG.size && p.y >= 0 && p.y < CONFIG.size;
     const nonnegative = n => Number.isFinite(n) && n >= 0;
     const validWarning = w => w === null || w && Array.isArray(w.cells) && w.cells.every(validPoint) && nonnegative(w.remaining) && Number.isFinite(w.total) && w.total > 0;
     const validMotion = m => !m || validPoint(m) && nonnegative(m.elapsed) && Number.isFinite(m.duration) && m.duration > 0;
-    if (d.version !== 2 || d.size !== CONFIG.size || d.tiles?.length !== CONFIG.size ** 2 || d.seen?.length !== CONFIG.size ** 2 || !validPoint(d.player) || !Number.isFinite(d.player.hp) || d.player.hp <= 0 || d.player.hp > CONFIG.maxHp || !WEAPONS[d.player.weapon] || !DIRECTIONS[d.player.facing] || !Array.isArray(d.enemies) || !Array.isArray(d.items) || !validPoint(d.boss) || !Number.isFinite(d.boss.hp) || !Number.isFinite(d.stats?.time) || !['playing', 'paused', 'won'].includes(d.status)) throw new Error('无效或不兼容的存档');
+    if (d.version !== 2 || d.size !== CONFIG.size || d.tiles?.length !== CONFIG.size ** 2 || d.seen?.length !== CONFIG.size ** 2 || !validPoint(player) || !Number.isFinite(player.hp) || player.hp <= 0 || player.hp > player.maxHp || !WEAPONS[player.weapon] || !DIRECTIONS[player.facing] || !Array.isArray(d.enemies) || !Array.isArray(d.items) || !validPoint(d.boss) || !Number.isFinite(d.boss.hp) || !Number.isFinite(d.stats?.time) || !['playing', 'paused', 'levelup', 'won'].includes(d.status)) throw new Error('无效或不兼容的存档');
+    if (!Number.isSafeInteger(player.level) || player.level < 1 || !['xp','healthUpgrades','speedUpgrades','pendingUpgrades'].every(key => Number.isSafeInteger(player[key]) && player[key] >= 0) || player.xp >= PROGRESSION.xpBase + (player.level - 1) * PROGRESSION.xpPerLevel || player.healthUpgrades + player.speedUpgrades + player.pendingUpgrades !== player.level - 1 || player.maxHp !== CONFIG.maxHp + player.healthUpgrades * PROGRESSION.healthBonus) throw new Error('成长数据损坏');
     if (d.tiles.some(t => t !== 0 && t !== 1) || d.seen.some(t => t !== 0 && t !== 1) || d.enemies.some(e => !validPoint(e) || !ENEMIES[e.type] || !Number.isFinite(e.hp)) || d.items.some(i => !validPoint(i) || !['food', 'weapon'].includes(i.type) || i.type === 'weapon' && !WEAPONS[i.level])) throw new Error('存档内容损坏');
     if (!validMotion(d.move) || !nonnegative(d.stats.time) || !nonnegative(d.stats.kills) || !nonnegative(d.stats.trees) || !nonnegative(d.stats.explored) || d.stats.explored > CONFIG.size ** 2 || !nonnegative(d.attackCooldown) || !nonnegative(d.invincible) || d.boss.maxHp !== CONFIG.bossHp || d.boss.hp < 0 || d.boss.hp > CONFIG.bossHp || !validWarning(d.boss.windup) || !Number.isFinite(d.boss.cooldown) || !Number.isInteger(d.boss.phase) || d.enemies.some(e => e.hp <= 0 || e.hp > ENEMIES[e.type].hp || !validWarning(e.windup) || !validMotion(e.move) || !Number.isFinite(e.cooldown) || e.facing !== undefined && !DIRECTIONS[e.facing] || e.wanderCooldown !== undefined && !nonnegative(e.wanderCooldown))) throw new Error('存档状态损坏');
     const g = Object.create(Game.prototype);
-    Object.assign(g, d, { size: CONFIG.size, tiles: Uint8Array.from(d.tiles), seen: Uint8Array.from(d.seen), rng: random(d.seed ^ Math.floor(d.stats.time * 100)), effects: [], events: [], move: d.move || null, slash: null, impactPause: 0 });
+    Object.assign(g, d, { player, size: CONFIG.size, tiles: Uint8Array.from(d.tiles), seen: Uint8Array.from(d.seen), rng: random(d.seed ^ Math.floor(d.stats.time * 100)), effects: [], events: [], move: d.move || null, slash: null, impactPause: 0 });
     g.status = d.status === 'won' ? 'won' : 'paused';
     return g;
   }

@@ -108,7 +108,7 @@ test('monster disengages without healing, resumes wandering, and never respawns'
 test('kills can drop food and both exploration and kills yield weapons', () => {
   const g = sandbox(), e = monster(51, 50, 'orc');
   g.rng = () => .01; g.kill(e); assert.equal(g.items.at(-1).type, 'weapon'); assert.equal(g.items.at(-1).level, 2);
-  let n = 0; g.rng = () => n++ === 0 ? .2 : .1; g.kill(e); assert.equal(g.items.at(-1).type, 'food');
+  let n = 0; g.rng = () => n++ === 0 ? .2 : .1; g.kill(monster(52, 50, 'orc')); assert.equal(g.items.at(-1).type, 'food');
 });
 test('boss has telegraphed patterns, delayed damage, and fully heals on retreat', () => {
   const g = sandbox(); g.player.x = 79; g.player.y = 80;

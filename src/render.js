@@ -225,8 +225,8 @@ export class Renderer {
         ctx.save(); ctx.globalAlpha=e.life*1.3; ctx.translate(a.x,a.y); ctx.rotate(t*.8);
         sprite(ctx,-tile/3,-tile/3,tile/24,e.type); ctx.restore();
       } else {
-        ctx.font=`bold ${tile*.2}px monospace`; ctx.textAlign='center'; ctx.fillStyle=e.kind==='heal'?'#e1f1a7':'#fff0c5';
-        ctx.fillText(e.text||'',a.x,a.y-tile*.43-t*tile*.3);
+        ctx.font=`bold ${tile*(e.kind==='xp'?.14:.2)}px monospace`; ctx.textAlign='center'; ctx.fillStyle=e.kind==='heal'?'#e1f1a7':e.kind==='xp'?'#98dbed':'#fff0c5';
+        ctx.fillText(e.text||'',a.x,a.y-tile*.43-t*tile*.3+(e.kind==='xp'?tile*.25:0));
       }
     }
     const gradient=ctx.createRadialGradient(center.x,center.y,Math.min(width,height)*.28,center.x,center.y,Math.max(width,height)*.7);

@@ -1,4 +1,4 @@
-import { Game, CONFIG, WEAPONS } from './game.js';
+import { Game, CONFIG, WEAPONS, PROGRESSION } from './game.js';
 import { Renderer, sprite, weaponIcon } from './render.js';
 import { Sound } from './audio.js';
 
@@ -44,14 +44,18 @@ function startFresh() {
   save(); updateUI();
 }
 function pause() {
-  if (!started || game.status !== 'playing') return;
+  if (!started || !['playing', 'levelup'].includes(game.status)) return;
   game.pause(); held.clear(); save(); updateUI();
 }
 function updateUI() {
   const p = game.player, weapon = WEAPONS[p.weapon], explored = (game.stats.explored / game.tiles.length * 100).toFixed(1);
-  $('health-value').innerHTML = `${p.hp} <small>/ ${CONFIG.maxHp}</small>`;
-  $('health-fill').style.width = `${p.hp}%`;
-  $('health-fill').style.filter = p.hp < 30 ? 'sepia(1) saturate(4) hue-rotate(320deg)' : '';
+  $('health-value').innerHTML = `${p.hp} <small>/ ${p.maxHp}</small>`;
+  $('health-fill').style.width = `${p.hp / p.maxHp * 100}%`;
+  $('health-fill').style.filter = p.hp / p.maxHp < .3 ? 'sepia(1) saturate(4) hue-rotate(320deg)' : '';
+  $('level-badge').textContent = `LV.${p.level}`;
+  $('xp-value').textContent = `${p.xp} / ${game.xpToNextLevel()}`;
+  $('xp-fill').style.width = `${p.xp / game.xpToNextLevel() * 100}%`;
+  $('attack-rate').textContent = `攻速 ${(1 / game.attackInterval()).toFixed(2)} 次/秒`;
   $('weapon-name').textContent = weapon.name;
   $('weapon-description').textContent = `伤害 ${weapon.damage} · ${['前方 1 格', '前方一排 3 格', '前方两排 6 格'][p.weapon]}`;
   $('weapon-tier').textContent = ['I', 'II', 'III'][p.weapon];
@@ -63,7 +67,7 @@ function updateUI() {
   $('explored-value').textContent = `${explored}%`;
   $('explore-fill').style.width = `${explored}%`;
   $('message').textContent = game.message;
-  $('status-label').textContent = !started ? '等待出发' : ({ playing: '正在探索', paused: '行动暂停', dead: '行动失败', won: '任务完成' })[game.status];
+  $('status-label').textContent = !started ? '等待出发' : ({ playing: '正在探索', paused: '行动暂停', levelup: '选择升级强化', dead: '行动失败', won: '任务完成' })[game.status];
   $('pause-button').disabled = !started || ['dead', 'won'].includes(game.status);
   $('pause-button').textContent = game.status === 'paused' && started ? '▷' : 'Ⅱ';
   $('pause-button').setAttribute('aria-label', game.status === 'paused' && started ? '继续游戏' : '暂停游戏');
@@ -75,6 +79,9 @@ function updateUI() {
   $('result-stats').hidden = true;
   $('new-button').hidden = true;
   $('overlay-controls').hidden = false;
+  $('primary-button').hidden = false;
+  $('upgrade-options').hidden = true;
+  document.querySelector('.overlay-card').classList.toggle('upgrading', game.status === 'levelup' && started && !newConfirm);
   if (!overlay) { renderer.minimap(game); return; }
   if (newConfirm) {
     $('overlay-tag').textContent = 'NEW OPERATION';
@@ -82,6 +89,17 @@ function updateUI() {
     $('overlay-copy').innerHTML = '这会覆盖当前一局的进度。<br>地图、装备和探索记录将重新开始。';
     $('primary-button').innerHTML = '确认新开局 <span>→</span>';
     $('new-button').hidden = false; $('new-button').textContent = '返回当前进度';
+  } else if (started && game.status === 'levelup') {
+    $('overlay-tag').textContent = 'LEVEL UP';
+    $('overlay-title').textContent = `升级至 LV.${p.level}`;
+    $('overlay-copy').textContent = `获得 ${p.pendingUpgrades} 次强化机会，选择你的成长方向。`;
+    $('health-preview').textContent = `${p.maxHp} → ${p.maxHp + PROGRESSION.healthBonus} 生命上限`;
+    $('speed-preview').textContent = `${(1 / game.attackInterval()).toFixed(2)} → ${(1 / game.attackInterval(p.speedUpgrades + 1)).toFixed(2)} 次/秒`;
+    $('speed-upgrade').disabled = game.attackInterval() <= PROGRESSION.minAttackTime;
+    if ($('speed-upgrade').disabled) $('speed-preview').textContent = '攻击速度已达上限';
+    $('upgrade-options').hidden = false;
+    $('primary-button').hidden = true;
+    $('overlay-controls').hidden = true;
   } else if (!started || game.status === 'paused') {
     $('overlay-tag').textContent = !started ? 'OPERATION · 001' : 'OPERATION PAUSED';
     $('overlay-title').textContent = !started ? '无畏士兵' : '稍作休整';
@@ -95,7 +113,7 @@ function updateUI() {
     $('overlay-copy').innerHTML = won ? '荒野领主已被击败。<br>你用一把刀，走出了自己的路。' : '这一局的进度已清除。<br>新的森林，等待下一次出发。';
     $('primary-button').innerHTML = '再次出发 <span>→</span>';
     $('result-stats').hidden = false;
-    $('result-stats').innerHTML = `<div><b>${formatTime(game.stats.time)}</b><span>行动用时</span></div><div><b>${explored}%</b><span>探索比例</span></div><div><b>${game.stats.kills}</b><span>敌人击败</span></div>`;
+    $('result-stats').innerHTML = `<div><b>${formatTime(game.stats.time)}</b><span>行动用时</span></div><div><b>${explored}%</b><span>探索比例</span></div><div><b>${game.stats.kills}</b><span>敌人击败</span></div><div><b>${p.level}</b><span>最终等级</span></div>`;
     $('overlay-controls').hidden = true;
   }
   renderer.minimap(game);
@@ -109,9 +127,15 @@ $('primary-button').addEventListener('click', () => {
   $('primary-button').blur();
 });
 $('new-button').addEventListener('click', () => { newConfirm = !newConfirm; updateUI(); });
+function selectUpgrade(type) {
+  if (!game.chooseUpgrade(type)) return;
+  held.clear(); sound.unlock(); save(); updateUI();
+}
+$('health-upgrade').addEventListener('click', () => selectUpgrade('health'));
+$('speed-upgrade').addEventListener('click', () => selectUpgrade('speed'));
 $('pause-button').addEventListener('click', () => {
   sound.unlock();
-  if (game.status === 'playing') pause();
+  if (['playing', 'levelup'].includes(game.status)) pause();
   else if (game.status === 'paused') { game.resume(); newConfirm = false; updateUI(); }
   $('pause-button').blur();
 });
@@ -127,8 +151,12 @@ document.addEventListener('keydown', event => {
   if (keys[key] || event.code === 'Space' || key === 'escape') event.preventDefault();
   if (!started) return;
   if (key === 'escape' && !event.repeat) {
-    if (game.status === 'playing') pause();
+    if (['playing', 'levelup'].includes(game.status)) pause();
     else if (game.status === 'paused') { newConfirm = false; game.resume(); held.clear(); updateUI(); }
+    return;
+  }
+  if (game.status === 'levelup') {
+    if (['1', '2'].includes(key)) { event.preventDefault(); if (!event.repeat) selectUpgrade(key === '1' ? 'health' : 'speed'); }
     return;
   }
   if (game.status !== 'playing') return;
@@ -153,11 +181,11 @@ function frame(now) {
     if (!game.move && held.size) game.tryMove([...held.values()].at(-1));
     saveElapsed += dt;
     if (saveElapsed >= 2) { save(); saveElapsed = 0; }
-    if (game.events.includes('dead') || game.events.includes('won')) { held.clear(); save(); updateUI(); }
-    if (game.events.includes('upgrade') || game.events.includes('heal') || game.events.includes('hurt')) updateUI();
+    if (game.events.includes('upgrade') || game.events.includes('heal') || game.events.includes('hurt') || game.events.includes('growth')) updateUI();
   }
+  if (game.events.some(event => ['dead','won','levelup'].includes(event))) { held.clear(); save(); updateUI(); }
   for (const event of game.events) sound.play(event);
-  if (game.events.some(event => ['upgrade','heal'].includes(event))) {
+  if (game.events.some(event => ['upgrade','heal','growth'].includes(event))) {
     $('toast').textContent = game.message; $('toast').hidden = false; toastRemaining = 2;
   }
   game.events.length = 0;
