@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
 
-const KEY = 'fearless-soldier.save.v1';
+const KEY = 'fearless-soldier.save.v2';
 async function fixture(page, kind) {
   await page.goto('/');
   await page.evaluate(async ({ key, kind }) => {
     const { Game } = await import('/src/game.js');
     const g = new Game(345);
     if (kind === 'death') {
-      g.player.hp = 10; g.carve(101, 100);
-      g.enemies = [{ id: 0, type: 'zombie', x: 101, y: 100, hp: 45, active: true, cooldown: 0, windup: null }];
+      g.player.hp = 10; g.carve(51, 50);
+      g.enemies = [{ id: 0, type: 'zombie', x: 51, y: 50, hp: 45, active: true, cooldown: 0, windup: null }];
     }
     if (kind === 'boss') {
       g.player.x = g.boss.x - 1; g.player.y = g.boss.y; g.player.facing = 'right'; g.boss.hp = 15; g.boss.active = true;
@@ -16,16 +16,17 @@ async function fixture(page, kind) {
     }
     if (kind === 'arena') {
       g.player.x = g.boss.x - 1; g.player.y = g.boss.y; g.player.facing = 'right'; g.boss.hp = 572; g.boss.active = true; g.reveal();
+      g.carve(g.boss.x - 4, g.boss.y); g.carve(g.boss.x - 5, g.boss.y);
     }
     if (kind === 'supplies') {
-      g.enemies = []; g.player.hp = 50; g.rectangle(100, 99, 6, 3);
-      g.items = [{ x: 101, y: 100, type: 'food' }, { x: 102, y: 100, type: 'weapon', level: 2 }, { x: 103, y: 100, type: 'weapon', level: 1 }];
+      g.enemies = []; g.player.hp = 50; g.rectangle(50, 49, 6, 3);
+      g.items = [{ x: 51, y: 50, type: 'food' }, { x: 52, y: 50, type: 'weapon', level: 2 }, { x: 53, y: 50, type: 'weapon', level: 1 }];
     }
     if (kind === 'combat') {
       g.player.hp = 52; g.player.weapon = 2;
-      g.enemies = [{ id: 0, type: 'orc', x: 103, y: 100, hp: 100, active: false, cooldown: 0, windup: null }];
-      g.rectangle(101, 99, 5, 3);
-      g.items = [{ x: 102, y: 101, type: 'food' }, { x: 104, y: 99, type: 'weapon', level: 1 }];
+      g.enemies = [{ id: 0, type: 'orc', x: 53, y: 50, hp: 100, active: false, cooldown: 0, windup: null }];
+      g.rectangle(51, 49, 5, 3);
+      g.items = [{ x: 52, y: 51, type: 'food' }, { x: 54, y: 49, type: 'weapon', level: 1 }];
     }
     localStorage.setItem(key, g.serialize());
   }, { key: KEY, kind });
@@ -40,19 +41,19 @@ test('actual keyboard exploration, chopping, and automatic save survive reload',
   await page.screenshot({ path: 'artifacts/title.png', fullPage: true });
   await page.getByRole('button', { name: '开始拓荒' }).click();
   await page.keyboard.press('ArrowRight'); await page.waitForTimeout(200);
-  await expect(page.locator('#coordinates')).toContainText('X 101');
+  await expect(page.locator('#coordinates')).toContainText('X 051');
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('#coordinates')).toContainText('X 101');
+  await expect(page.locator('#coordinates')).toContainText('X 051');
   await page.keyboard.press('Space');
   await expect(page.locator('#tree-count')).toHaveText('1');
   await page.keyboard.press('ArrowRight'); await page.waitForTimeout(200);
-  await expect(page.locator('#coordinates')).toContainText('X 102');
+  await expect(page.locator('#coordinates')).toContainText('X 052');
   await page.keyboard.press('Escape');
   await expect(page.locator('#overlay-title')).toHaveText('稍作休整');
   const stored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), KEY);
-  expect(stored.player.x).toBe(102); expect(stored.stats.trees).toBe(1); expect(stored.tiles).toHaveLength(40000);
+  expect(stored.player.x).toBe(52); expect(stored.stats.trees).toBe(1); expect(stored.tiles).toHaveLength(10000);
   await page.reload(); await page.getByRole('button', { name: '继续探索' }).click();
-  await expect(page.locator('#coordinates')).toContainText('X 102');
+  await expect(page.locator('#coordinates')).toContainText('X 052');
   await expect(page.locator('#tree-count')).toHaveText('1');
   await page.screenshot({ path: 'artifacts/exploration.png', fullPage: true });
   expect(errors).toEqual([]);
@@ -67,7 +68,7 @@ test('pause freezes timer and key repeat does not repeatedly attack', async ({ p
   await expect(page.locator('#overlay-title')).toHaveText('稍作休整');
   const timer = await page.locator('#mission-time').textContent();
   await page.waitForTimeout(1100); await expect(page.locator('#mission-time')).toHaveText(timer);
-  await page.keyboard.press('ArrowRight'); await expect(page.locator('#coordinates')).toContainText('X 101');
+  await page.keyboard.press('ArrowRight'); await expect(page.locator('#coordinates')).toContainText('X 051');
   await page.getByRole('button', { name: '继续探索' }).click();
   await expect(page.locator('#overlay')).toBeHidden();
 });
@@ -80,7 +81,7 @@ test('death clears persistent progress and starts a new seed without equipment',
   await page.getByRole('button', { name: '再次出发' }).click();
   await expect(page.locator('#health-value')).toContainText('100');
   await expect(page.locator('#weapon-name')).toHaveText('野战小刀');
-  await expect(page.locator('#coordinates')).toContainText('X 100');
+  await expect(page.locator('#coordinates')).toContainText('X 050');
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).seed, KEY)).not.toBe(345);
 });
 
@@ -139,7 +140,7 @@ test('weapon and combat visuals render at desktop sizes without runtime errors',
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.screenshot({ path: 'artifacts/desktop-small.png', fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect(await page.locator('.field-footer').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
+  expect(await page.locator('#world').evaluate(element => element.getBoundingClientRect().bottom === innerHeight)).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -147,14 +148,14 @@ test('corrupted storage still allows a fresh playable run', async ({ page }) => 
   await page.goto('/'); await page.evaluate(key => localStorage.setItem(key, '{broken'), KEY); await page.reload();
   await page.getByRole('button', { name: '开始拓荒' }).click();
   await expect(page.locator('#overlay')).toBeHidden();
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).version, KEY)).toBe(1);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).version, KEY)).toBe(2);
 });
 
 test('unavailable browser storage reports failure while allowing play', async ({ page }) => {
   await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('Storage full', 'QuotaExceededError'); }; });
   await page.goto('/'); await page.getByRole('button', { name: '开始拓荒' }).click();
   await expect(page.locator('#save-state')).toContainText('无法保存');
-  await page.keyboard.press('ArrowRight'); await expect(page.locator('#coordinates')).toContainText('X 101');
+  await page.keyboard.press('ArrowRight'); await expect(page.locator('#coordinates')).toContainText('X 051');
 });
 
 test('hidden document pauses and becoming visible never auto-resumes', async ({ page }) => {
@@ -169,4 +170,65 @@ test('hidden document pauses and becoming visible never auto-resumes', async ({ 
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await expect(page.locator('#overlay')).toBeVisible();
+});
+
+test('full viewport gameplay has circular top-left radar and bottom-right status with no scrolling', async ({ page }) => {
+  await page.goto('/');await page.getByRole('button',{name:'开始拓荒'}).click();
+  for(const viewport of [{width:1360,height:768},{width:1024,height:800},{width:800,height:600}]) {
+    await page.setViewportSize(viewport);
+    const layout=await page.evaluate(() => {
+      const bounds=selector => {const r=document.querySelector(selector).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};};
+      return {world:bounds('#world'),radar:bounds('.radar-frame'),status:bounds('.status-hud'),round:getComputedStyle(document.querySelector('.radar-frame')).borderRadius,scroll:document.documentElement.scrollHeight,footers:document.querySelectorAll('footer,.sidebar,.field-footer').length};
+    });
+    expect(layout.world).toMatchObject({x:0,y:0,width:viewport.width,height:viewport.height});
+    expect(layout.radar.x).toBeLessThan(30);expect(layout.radar.y).toBeLessThan(30);expect(layout.round).toBe('50%');
+    expect(Math.abs(layout.radar.width-layout.radar.height)).toBeLessThan(1);
+    expect(viewport.width-layout.status.right).toBeLessThan(30);expect(viewport.height-layout.status.bottom).toBeLessThan(30);
+    expect(layout.scroll).toBe(viewport.height);expect(layout.footers).toBe(0);
+  }
+});
+
+test('real movement keeps rendered soldier centered and camera advances in sub-tile increments', async ({ page }) => {
+  await fixture(page,'supplies');
+  await page.evaluate(async () => {
+    const {Renderer}=await import('/src/render.js');const world=Renderer.prototype.world;
+    window.motionFrames=[];
+    Renderer.prototype.world=function(...args) {world.apply(this,args);window.motionFrames.push(structuredClone(this.lastFrame));};
+  });
+  await page.keyboard.down('ArrowRight');await page.waitForTimeout(750);await page.keyboard.up('ArrowRight');
+  const frames=await page.evaluate(() => window.motionFrames);
+  expect(frames.length).toBeGreaterThan(10);
+  for(let i=1;i<frames.length;i++) {
+    expect(frames[i].player).toEqual(frames[0].player);
+    expect(Math.abs(frames[i].camera.x-frames[i-1].camera.x)).toBeLessThan(.7);
+    expect(frames[i].camera.y).toBe(frames[0].camera.y);
+  }
+  expect(frames.at(-1).camera.x-frames[0].camera.x).toBeGreaterThan(2);
+});
+
+test('actual slash renders distinct weapon poses and impact recoil in consecutive frames', async ({ page }) => {
+  await fixture(page,'combat');
+  await page.evaluate(async () => {
+    const {Renderer}=await import('/src/render.js');const world=Renderer.prototype.world;
+    window.combatFrames=[];
+    Renderer.prototype.world=function(game,...args){world.call(this,game,...args);window.combatFrames.push({slash:game.slash?{life:game.slash.life,duration:game.slash.duration,facing:game.slash.facing}:null,recoil:game.enemies.some(e=>e.reaction?.remaining>0),sparks:game.effects.some(e=>e.kind==='spark'),strike:game.enemies.some(e=>e.strike?.remaining>0)});};
+  });
+  await page.keyboard.press('ArrowRight');await page.waitForTimeout(180);await page.keyboard.press('Space');
+  await page.waitForTimeout(60);await page.screenshot({path:'artifacts/melee-impact.png'});
+  await page.waitForTimeout(260);
+  const frames=await page.evaluate(() => window.combatFrames),swing=frames.filter(f=>f.slash);
+  expect(swing.length).toBeGreaterThan(2);expect(swing[0].slash.life).toBeGreaterThan(swing.at(-1).slash.life);
+  expect(swing.some(f=>f.recoil&&f.sparks)).toBe(true);
+  await page.waitForFunction(() => window.combatFrames.some(frame => frame.strike));
+  await page.screenshot({path:'artifacts/monster-strike.png'});
+});
+
+test('legacy map save stays untouched and new run uses version 2 with 10000 tiles', async ({ page }) => {
+  await page.goto('/');
+  const old=JSON.stringify({version:1,size:200,backup:'previous forest'});
+  await page.evaluate(raw=>localStorage.setItem('fearless-soldier.save.v1',raw),old);
+  await page.reload();await expect(page.locator('#version-note')).toContainText('100×100');
+  await page.getByRole('button',{name:'开始拓荒'}).click();
+  const saves=await page.evaluate(key=>({old:localStorage.getItem('fearless-soldier.save.v1'),current:JSON.parse(localStorage.getItem(key))}),KEY);
+  expect(saves.old).toBe(old);expect(saves.current.version).toBe(2);expect(saves.current.size).toBe(100);expect(saves.current.tiles).toHaveLength(10000);
 });

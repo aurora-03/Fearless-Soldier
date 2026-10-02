@@ -1,4 +1,4 @@
-export const CONFIG = { size: 200, vision: 4, maxHp: 100, moveTime: 0.14, attackTime: 0.24, foodHeal: 35, aggro: 4, leash: 8, bossHp: 620 };
+export const CONFIG = { size: 100, vision: 4, maxHp: 100, moveTime: 0.14, attackTime: 0.24, foodHeal: 35, aggro: 4, leash: 8, bossHp: 620 };
 export const WEAPONS = [
   { name: '野战小刀', short: '小刀', damage: 15, depth: 1, width: 1 },
   { name: '精钢长刀', short: '长刀', damage: 28, depth: 1, width: 3 },
@@ -24,13 +24,14 @@ export class Game {
     this.size = CONFIG.size;
     this.tiles = new Uint8Array(this.size * this.size).fill(1);
     this.seen = new Uint8Array(this.tiles.length);
-    this.player = { x: 100, y: 100, hp: CONFIG.maxHp, weapon: 0, facing: 'down' };
+    this.player = { x: this.size / 2, y: this.size / 2, hp: CONFIG.maxHp, weapon: 0, facing: 'down' };
     this.enemies = [];
     this.items = [];
     this.status = 'playing';
     this.stats = { time: 0, kills: 0, trees: 0, explored: 0 };
     this.attackCooldown = 0;
     this.invincible = 0;
+    this.impactPause = 0;
     this.move = null;
     this.slash = null;
     this.effects = [];
@@ -47,7 +48,7 @@ export class Game {
   generate() {
     const rooms = [];
     // Separate room placement from content placement; everything is fixed at world creation.
-    for (let gy = 5; gy < 195; gy += 8) for (let gx = 5; gx < 195; gx += 8) {
+    for (let gy = 5; gy < this.size - 5; gy += 8) for (let gx = 5; gx < this.size - 5; gx += 8) {
       const x = gx + Math.floor(this.rng() * 5) - 2;
       const y = gy + Math.floor(this.rng() * 5) - 2;
       if (distance({ x, y }, this.player) < 7 || this.rng() < 0.16) continue;
@@ -62,13 +63,16 @@ export class Game {
       }
     }
     // Close the immediate spawn area before carving its exact 3×3 clearing.
-    for (let y = 96; y <= 104; y++) for (let x = 96; x <= 104; x++) this.tiles[this.index(x, y)] = 1;
-    this.rectangle(99, 99, 3, 3);
-    this.rectangle(104, 98, 4, 4);
-    rooms.push({ x: 106, y: 100, w: 4, h: 4 });
+    const { x: sx, y: sy } = this.player;
+    for (let y = sy - 4; y <= sy + 4; y++) for (let x = sx - 4; x <= sx + 4; x++) this.tiles[this.index(x, y)] = 1;
+    this.rectangle(sx - 1, sy - 1, 3, 3);
+    this.rectangle(sx + 4, sy - 2, 4, 4);
+    rooms.push({ x: sx + 6, y: sy, w: 4, h: 4 });
     const quadrant = Math.floor(this.rng() * 4);
-    const bx = quadrant % 2 ? 160 + Math.floor(this.rng() * 28) : 12 + Math.floor(this.rng() * 28);
-    const by = quadrant < 2 ? 12 + Math.floor(this.rng() * 28) : 160 + Math.floor(this.rng() * 28);
+    const far = () => this.size - 22 + Math.floor(this.rng() * 12);
+    const near = () => 10 + Math.floor(this.rng() * 12);
+    const bx = quadrant % 2 ? far() : near();
+    const by = quadrant < 2 ? near() : far();
     this.boss = { x: bx, y: by, hp: CONFIG.bossHp, maxHp: CONFIG.bossHp, active: false, windup: null, cooldown: 1.2, phase: 0 };
     this.rectangle(bx - 3, by - 3, 7, 7);
     const occupied = new Set();
@@ -83,21 +87,21 @@ export class Game {
     for (const room of rooms) {
       const d = distance(room, this.player);
       if (this.rng() < 0.65) place(room.x - 1, room.y, 'food');
-      if (this.rng() < 0.13) place(room.x, room.y + 1, 'weapon', { level: d > 38 && this.rng() < 0.44 ? 2 : 1 });
+      if (this.rng() < 0.13) place(room.x, room.y + 1, 'weapon', { level: d > 24 && this.rng() < 0.44 ? 2 : 1 });
       if (d > 8 && this.rng() < 0.64) {
-        const type = d < 20 ? 'zombie' : d < 45 ? (this.rng() < 0.5 ? 'zombie' : 'wolf') : ['zombie', 'wolf', 'orc'][Math.floor(this.rng() * 3)];
+        const type = d < 12 ? 'zombie' : d < 26 ? (this.rng() < 0.5 ? 'zombie' : 'wolf') : ['zombie', 'wolf', 'orc'][Math.floor(this.rng() * 3)];
         place(room.x, room.y, type);
-        if (d > 45 && this.rng() < 0.25) place(room.x + 1, room.y - 1, this.rng() < 0.5 ? 'wolf' : 'orc');
+        if (d > 26 && this.rng() < 0.25) place(room.x + 1, room.y - 1, this.rng() < 0.5 ? 'wolf' : 'orc');
       }
     }
     // Guaranteed early upgrade, still reached by exploration rather than a quest marker.
-    this.rectangle(115, 103, 3, 3);
-    this.items = this.items.filter(i => !(i.x === 116 && i.y === 104));
-    this.enemies = this.enemies.filter(e => !(e.x === 116 && e.y === 104));
-    this.items.push({ x: 116, y: 104, type: 'weapon', level: 1 });
-    if (!this.items.some(i => i.x === 106 && i.y === 100)) this.items.push({ x: 106, y: 100, type: 'food' });
+    this.rectangle(sx + 15, sy + 3, 3, 3);
+    this.items = this.items.filter(i => !(i.x === sx + 16 && i.y === sy + 4));
+    this.enemies = this.enemies.filter(e => !(e.x === sx + 16 && e.y === sy + 4));
+    this.items.push({ x: sx + 16, y: sy + 4, type: 'weapon', level: 1 });
+    if (!this.items.some(i => i.x === sx + 6 && i.y === sy)) this.items.push({ x: sx + 6, y: sy, type: 'food' });
     if (!this.items.some(i => i.type === 'weapon' && i.level === 2)) {
-      const room = rooms.find(r => distance(r, this.player) > 45 && distance(r, this.boss) > 6);
+      const room = rooms.find(r => distance(r, this.player) > 28 && distance(r, this.boss) > 6);
       if (room) this.items.push({ x: room.x, y: room.y + 1, type: 'weapon', level: 2 });
     }
   }
@@ -136,28 +140,34 @@ export class Game {
     if (this.status !== 'playing' || this.attackCooldown > 0) return false;
     const cells = this.attackCells(), damage = WEAPONS[this.player.weapon].damage;
     this.attackCooldown = CONFIG.attackTime;
-    this.slash = { cells, life: 0.18 };
+    this.slash = { cells, life: 0.22, duration: 0.22, facing: this.player.facing, weapon: this.player.weapon };
     let chopped = 0, hits = 0;
     for (const c of cells) {
       const k = this.index(c.x, c.y);
       if (this.tiles[k]) { this.tiles[k] = 0; this.stats.trees++; chopped++; this.effects.push({ ...c, text: '木屑', kind: 'wood', life: 0.45 }); }
       for (const e of this.enemies) if (e.hp > 0 && e.x === c.x && e.y === c.y) {
         e.hp = Math.max(0, e.hp - damage); hits++;
+        e.reaction = { remaining: 0.22, duration: 0.22, direction: DIRECTIONS[this.player.facing] };
+        this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28 });
         this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55 });
         if (!e.hp) this.kill(e);
       }
       if (this.boss.hp > 0 && this.boss.x === c.x && this.boss.y === c.y) {
         this.boss.hp = Math.max(0, this.boss.hp - damage); hits++;
+        this.boss.reaction = { remaining: 0.22, duration: 0.22, direction: DIRECTIONS[this.player.facing] };
+        this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28 });
         this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55 });
         if (!this.boss.hp) { this.stats.kills++; this.status = 'won'; this.message = '森林重归宁静。你击败了荒野领主！'; this.events.push('won'); }
       }
     }
     this.enemies = this.enemies.filter(e => e.hp > 0);
+    if (hits) this.impactPause = 0.035;
     this.events.push(hits ? 'hit' : chopped ? 'chop' : 'slash');
     return true;
   }
   kill(e) {
     this.stats.kills++;
+    this.effects.push({ x: e.x, y: e.y, kind: 'death', type: e.type, life: 0.45, duration: 0.45 });
     if (this.rng() < 0.14) {
       this.items.push({ x: e.x, y: e.y, type: 'weapon', level: e.type === 'orc' && this.rng() < 0.65 ? 2 : 1 });
       this.message = '敌人掉落了武器。走过去拾取。';
@@ -221,6 +231,9 @@ export class Game {
       if (e.windup) {
         e.windup.remaining -= dt;
         if (e.windup.remaining <= 0) {
+          const target = e.windup.cells[0];
+          e.strike = { remaining: 0.24, duration: 0.24, dx: target.x - e.x, dy: target.y - e.y };
+          this.effects.push({ x: e.x, y: e.y, target, type: e.type, kind: 'enemy-slash', life: 0.24, duration: 0.24 });
           if (e.windup.cells.some(c => c.x === this.player.x && c.y === this.player.y)) this.hurt(spec.damage);
           this.effects.push(...e.windup.cells.map(c => ({ ...c, kind: 'blast', text: '', life: 0.2 })));
           e.windup = null; e.cooldown = 0.65;
@@ -256,6 +269,8 @@ export class Game {
     if (b.windup) {
       b.windup.remaining -= dt;
       if (b.windup.remaining <= 0) {
+        b.strike = { remaining: 0.4, duration: 0.4, dx: 0, dy: 1 };
+        this.effects.push({ x: b.x, y: b.y, kind: 'shockwave', life: 0.45, duration: 0.45 });
         if (b.windup.cells.some(c => c.x === this.player.x && c.y === this.player.y)) this.hurt(28);
         this.effects.push(...b.windup.cells.map(c => ({ ...c, text: '', kind: 'blast', life: 0.32 })));
         b.windup = null; b.cooldown = b.hp < b.maxHp * 0.4 ? 0.85 : 1.25;
@@ -278,6 +293,11 @@ export class Game {
   update(dt) {
     if (this.status !== 'playing') return;
     dt = Math.min(Math.max(dt, 0), 0.1);
+    for (const e of [...this.enemies, this.boss]) {
+      if (e.reaction) { e.reaction.remaining -= dt; if (e.reaction.remaining <= 0) e.reaction = null; }
+      if (e.strike) { e.strike.remaining -= dt; if (e.strike.remaining <= 0) e.strike = null; }
+    }
+    if (this.impactPause > 0) { this.impactPause = Math.max(0, this.impactPause - dt); return; }
     this.stats.time += dt;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.invincible = Math.max(0, this.invincible - dt);
@@ -287,22 +307,22 @@ export class Game {
     this.updateEnemies(dt);
     if (this.status === 'playing') this.updateBoss(dt);
   }
-  pause() { if (this.status === 'playing') { this.status = 'paused'; this.move = null; } }
+  pause() { if (this.status === 'playing') this.status = 'paused'; }
   resume() { if (this.status === 'paused') this.status = 'playing'; }
   serialize() {
-    return JSON.stringify({ version: 1, seed: this.seed, tiles: Array.from(this.tiles), seen: Array.from(this.seen), player: this.player, enemies: this.enemies, items: this.items, boss: this.boss, stats: this.stats, status: this.status, message: this.message, attackCooldown: this.attackCooldown, invincible: this.invincible });
+    return JSON.stringify({ version: 2, size: this.size, seed: this.seed, tiles: Array.from(this.tiles), seen: Array.from(this.seen), player: this.player, move: this.move, enemies: this.enemies, items: this.items, boss: this.boss, stats: this.stats, status: this.status, message: this.message, attackCooldown: this.attackCooldown, invincible: this.invincible });
   }
   static restore(raw) {
     const d = JSON.parse(raw);
-    const validPoint = p => p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x < 200 && p.y >= 0 && p.y < 200;
+    const validPoint = p => p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x < CONFIG.size && p.y >= 0 && p.y < CONFIG.size;
     const nonnegative = n => Number.isFinite(n) && n >= 0;
     const validWarning = w => w === null || w && Array.isArray(w.cells) && w.cells.every(validPoint) && nonnegative(w.remaining) && Number.isFinite(w.total) && w.total > 0;
     const validMotion = m => !m || validPoint(m) && nonnegative(m.elapsed) && Number.isFinite(m.duration) && m.duration > 0;
-    if (d.version !== 1 || d.tiles?.length !== 40000 || d.seen?.length !== 40000 || !validPoint(d.player) || !Number.isFinite(d.player.hp) || d.player.hp <= 0 || d.player.hp > 100 || !WEAPONS[d.player.weapon] || !DIRECTIONS[d.player.facing] || !Array.isArray(d.enemies) || !Array.isArray(d.items) || !validPoint(d.boss) || !Number.isFinite(d.boss.hp) || !Number.isFinite(d.stats?.time) || !['playing', 'paused', 'won'].includes(d.status)) throw new Error('无效或不兼容的存档');
+    if (d.version !== 2 || d.size !== CONFIG.size || d.tiles?.length !== CONFIG.size ** 2 || d.seen?.length !== CONFIG.size ** 2 || !validPoint(d.player) || !Number.isFinite(d.player.hp) || d.player.hp <= 0 || d.player.hp > CONFIG.maxHp || !WEAPONS[d.player.weapon] || !DIRECTIONS[d.player.facing] || !Array.isArray(d.enemies) || !Array.isArray(d.items) || !validPoint(d.boss) || !Number.isFinite(d.boss.hp) || !Number.isFinite(d.stats?.time) || !['playing', 'paused', 'won'].includes(d.status)) throw new Error('无效或不兼容的存档');
     if (d.tiles.some(t => t !== 0 && t !== 1) || d.seen.some(t => t !== 0 && t !== 1) || d.enemies.some(e => !validPoint(e) || !ENEMIES[e.type] || !Number.isFinite(e.hp)) || d.items.some(i => !validPoint(i) || !['food', 'weapon'].includes(i.type) || i.type === 'weapon' && !WEAPONS[i.level])) throw new Error('存档内容损坏');
-    if (!nonnegative(d.stats.time) || !nonnegative(d.stats.kills) || !nonnegative(d.stats.trees) || !nonnegative(d.stats.explored) || d.stats.explored > 40000 || !nonnegative(d.attackCooldown) || !nonnegative(d.invincible) || d.boss.maxHp !== CONFIG.bossHp || d.boss.hp < 0 || d.boss.hp > CONFIG.bossHp || !validWarning(d.boss.windup) || !Number.isFinite(d.boss.cooldown) || !Number.isInteger(d.boss.phase) || d.enemies.some(e => e.hp <= 0 || e.hp > ENEMIES[e.type].hp || !validWarning(e.windup) || !validMotion(e.move) || !Number.isFinite(e.cooldown))) throw new Error('存档状态损坏');
+    if (!validMotion(d.move) || !nonnegative(d.stats.time) || !nonnegative(d.stats.kills) || !nonnegative(d.stats.trees) || !nonnegative(d.stats.explored) || d.stats.explored > CONFIG.size ** 2 || !nonnegative(d.attackCooldown) || !nonnegative(d.invincible) || d.boss.maxHp !== CONFIG.bossHp || d.boss.hp < 0 || d.boss.hp > CONFIG.bossHp || !validWarning(d.boss.windup) || !Number.isFinite(d.boss.cooldown) || !Number.isInteger(d.boss.phase) || d.enemies.some(e => e.hp <= 0 || e.hp > ENEMIES[e.type].hp || !validWarning(e.windup) || !validMotion(e.move) || !Number.isFinite(e.cooldown))) throw new Error('存档状态损坏');
     const g = Object.create(Game.prototype);
-    Object.assign(g, d, { size: 200, tiles: Uint8Array.from(d.tiles), seen: Uint8Array.from(d.seen), rng: random(d.seed ^ Math.floor(d.stats.time * 100)), effects: [], events: [], move: null, slash: null });
+    Object.assign(g, d, { size: CONFIG.size, tiles: Uint8Array.from(d.tiles), seen: Uint8Array.from(d.seen), rng: random(d.seed ^ Math.floor(d.stats.time * 100)), effects: [], events: [], move: d.move || null, slash: null, impactPause: 0 });
     g.status = d.status === 'won' ? 'won' : 'paused';
     return g;
   }

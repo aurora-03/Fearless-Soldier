@@ -1,18 +1,33 @@
 import { Game, CONFIG, WEAPONS } from './game.js';
 import { Renderer, sprite, weaponIcon } from './render.js';
+import { Sound } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const renderer = new Renderer($('world'), $('minimap'));
-const SAVE_KEY = 'fearless-soldier.save.v1';
+const SAVE_KEY = 'fearless-soldier.save.v2';
+const sound = new Sound();
 const held = new Map();
 const keys = { w: 'up', arrowup: 'up', d: 'right', arrowright: 'right', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left' };
 let game = new Game(), started = false, last = performance.now(), saveElapsed = 0, hudElapsed = 0;
 let saveError = false, hasSave = false, newConfirm = false;
+let toastRemaining = 0;
 const formatTime = t => `${Math.floor(t / 60).toString().padStart(2, '0')}:${Math.floor(t % 60).toString().padStart(2, '0')}`;
 try {
   const raw = localStorage.getItem(SAVE_KEY);
   if (raw) { game = Game.restore(raw); hasSave = true; if (game.status === 'won') started = true; }
+  else if (localStorage.getItem('fearless-soldier.save.v1')) {
+    $('version-note').hidden = false;
+    $('version-note').textContent = '地图已缩为 100×100。旧版存档仍保留，本版将从新地图开始。';
+  }
 } catch { $('save-state').textContent = '存档不可用'; saveError = true; }
+
+function resize() {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  $('world').width = Math.round(window.innerWidth * ratio);
+  $('world').height = Math.round(window.innerHeight * ratio);
+}
+window.addEventListener('resize', resize);
+resize();
 
 function save() {
   if (!started) return;
@@ -25,6 +40,7 @@ function save() {
 function startFresh() {
   game = new Game((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
   started = true; newConfirm = false; held.clear(); saveElapsed = 0;
+  $('version-note').hidden = true;
   save(); updateUI();
 }
 function pause() {
@@ -49,7 +65,8 @@ function updateUI() {
   $('message').textContent = game.message;
   $('status-label').textContent = !started ? '等待出发' : ({ playing: '正在探索', paused: '行动暂停', dead: '行动失败', won: '任务完成' })[game.status];
   $('pause-button').disabled = !started || ['dead', 'won'].includes(game.status);
-  $('pause-button').innerHTML = `${game.status === 'paused' && started ? '继续' : '暂停'} <kbd>ESC</kbd>`;
+  $('pause-button').textContent = game.status === 'paused' && started ? '▷' : 'Ⅱ';
+  $('pause-button').setAttribute('aria-label', game.status === 'paused' && started ? '继续游戏' : '暂停游戏');
   $('boss-hud').hidden = !game.boss.active || game.boss.hp <= 0 || !started;
   $('boss-value').textContent = `${game.boss.hp} / ${game.boss.maxHp}`;
   $('boss-fill').style.width = `${game.boss.hp / game.boss.maxHp * 100}%`;
@@ -85,6 +102,7 @@ function updateUI() {
 }
 
 $('primary-button').addEventListener('click', () => {
+  sound.unlock();
   if (newConfirm || ['dead', 'won'].includes(game.status)) { startFresh(); return; }
   if (hasSave || started) { started = true; game.resume(); held.clear(); save(); updateUI(); }
   else startFresh();
@@ -92,9 +110,17 @@ $('primary-button').addEventListener('click', () => {
 });
 $('new-button').addEventListener('click', () => { newConfirm = !newConfirm; updateUI(); });
 $('pause-button').addEventListener('click', () => {
+  sound.unlock();
   if (game.status === 'playing') pause();
   else if (game.status === 'paused') { game.resume(); newConfirm = false; updateUI(); }
   $('pause-button').blur();
+});
+$('sound-button').addEventListener('click', () => {
+  sound.enabled = !sound.enabled;
+  sound.unlock();
+  $('sound-button').textContent = sound.enabled ? '♪' : '♩×';
+  $('sound-button').setAttribute('aria-label', sound.enabled ? '关闭音效' : '开启音效');
+  $('sound-button').blur();
 });
 document.addEventListener('keydown', event => {
   const key = event.key.toLowerCase();
@@ -107,7 +133,7 @@ document.addEventListener('keydown', event => {
   }
   if (game.status !== 'playing') return;
   if (keys[key] && !event.repeat) { held.delete(key); held.set(key, keys[key]); game.tryMove(keys[key]); }
-  if (event.code === 'Space' && !event.repeat) { game.attack(); updateUI(); }
+  if (event.code === 'Space' && !event.repeat) { sound.unlock(); game.attack(); updateUI(); }
 });
 document.addEventListener('keyup', event => held.delete(event.key.toLowerCase()));
 window.addEventListener('blur', pause);
@@ -130,7 +156,12 @@ function frame(now) {
     if (game.events.includes('dead') || game.events.includes('won')) { held.clear(); save(); updateUI(); }
     if (game.events.includes('upgrade') || game.events.includes('heal') || game.events.includes('hurt')) updateUI();
   }
+  for (const event of game.events) sound.play(event);
+  if (game.events.some(event => ['upgrade','heal'].includes(event))) {
+    $('toast').textContent = game.message; $('toast').hidden = false; toastRemaining = 2;
+  }
   game.events.length = 0;
+  if (toastRemaining > 0 && game.status === 'playing') { toastRemaining -= dt; if (toastRemaining <= 0) $('toast').hidden = true; }
   hudElapsed += dt;
   if (hudElapsed >= 0.1) { updateUI(); hudElapsed = 0; }
   renderer.world(game, game.status === 'playing' && started ? dt : 0);
