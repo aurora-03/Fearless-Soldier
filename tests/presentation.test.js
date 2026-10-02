@@ -8,7 +8,7 @@ function context(width = 900, height = 900) {
   const ctx = { canvas: { width, height }, translations,
     save() {}, restore() {}, translate(x,y) { translations.push({ x,y }); },
     scale() {}, rotate() {}, fillRect() {}, clearRect() {}, strokeRect() {},
-    beginPath() {}, closePath() {}, ellipse() {}, arc() {}, moveTo() {}, lineTo() {}, fill() {}, stroke() {}, clip() {}, fillText() {},
+    beginPath() {}, closePath() {}, ellipse() {}, arc() {}, moveTo() {}, lineTo() {}, fill() {}, stroke() {}, clip() {}, fillText() {}, strokeText() {},
     createRadialGradient() { return { addColorStop() {} }; },
     createLinearGradient() { return { addColorStop() {} }; },
   };

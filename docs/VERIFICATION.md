@@ -1,4 +1,4 @@
-# 0.3.0 版验证记录
+# 0.4.0 版验证记录
 
 日期：2026-10-01。验证基于本目录中的实际实现；平衡性仍需要玩家试玩调优。
 
@@ -6,7 +6,7 @@
 
 - `npm test`：48 项游戏逻辑与渲染回归测试全部通过。
 - `npm run check`：游戏、渲染、UI 与服务器 JavaScript 语法检查通过。
-- `npm run test:browser`：21 项 Chromium 浏览器交互测试全部通过。
+- `npm run test:browser`：23 项 Chromium 浏览器交互测试全部通过。
 - `npm start`：本地 5173 服务已启动，HTTP 返回 200。
 - 已实际查看首页、探索、战斗、Boss 红格预警、死亡、胜利和小屏桌面截图；游戏视野、像素角色、HUD 与覆盖界面正常呈现。
 
@@ -14,6 +14,7 @@
 
 | 需求 | 证据 |
 | --- | --- |
+| 角色/武器美术与特效 | 浏览器检查五种角色的透明轮廓各不相同、正背面像素内容不同、普通与受击状态均保留多种材质颜色；查看造型图集、特效中间帧及真实游戏中的三类怪物/Boss/武器截图。原有动作与居中镜头测试继续通过 |
 | 100×100 地图、3×3 出生空地、远处 7×7 Boss 区 | 逻辑测试覆盖 15 个种子的格数组与范围，检查安全出生和三种怪物/高级武器存在；新的格数组为 10,000 格，旧版面积的四分之一 |
 | 固定世界、重新开局不同地图 | 同种子生成一致、不同种子地形不同；浏览器重新开局检查新种子 |
 | 空地岛屿、部分天然道路 | `Game.generate` 先铺房间，再概率连接邻近房间；地图从生成起固定，所有木头均可砍除 |
@@ -60,6 +61,12 @@
 
 从等级 1 开始，首次需要 60 经验，以后每级额外需要 30 经验。普通怪物提供 20/25/45 经验，Boss 提供 150 经验。升级冻结战斗，玩家选择生命上限 +20（同步恢复 20 生命）或基础攻速 +12%；溢出经验和连续升级机会保留。攻速升级实际缩短攻击冷却与挥刀动画，生命升级同步改变食物和 HUD 的上限。当前 v2 存档兼容新增字段，未完成选择可以暂停或刷新继续。Boss 胜利优先于升级提示。
 
+## 0.4.0 美术重绘
+
+新增 `src/art.js`，定义士兵、僵尸、野狼、兽人、荒野领主的独立模型及小刀、长刀、大剑、兽人砍刀、领主重锤的统一武器模型。主地图、拾取图标、HUD 和头像使用同一绘制源。场景合成增加带亮边的渐细刀光、抓击/扑咬、定向火花、木屑叶片、倒下淡出与 Boss 冲击波；音效按武器等级区分频率和持续时间。
+
+美术验证包括浏览器像素内容检查及目视检查，不把主观审美判断等同于自动化测试结果。`art-showcase.png` 通过测试中暂停并隐藏暂停遮罩来观察稳定的实际游戏模型；`model-gallery.png` 由真实绘制函数生成；`effects-gallery.png` 为实际 Renderer 的中间动作预览。
+
 ## 本地截图
 
-运行浏览器测试会生成 `artifacts/level-up.png`、`growth-health.png`、`artifacts/title.png`、`exploration.png`、`combat.png`、`melee-impact.png`、`monster-strike.png`、`monster-patrol.png`、`boss-warning.png`、`death.png`、`victory.png` 和 `desktop-small.png`。这些是生成的验证产物，不属于游戏运行所需资源。
+美术预览包含 `artifacts/model-gallery.png`、`art-showcase.png` 和 `effects-gallery.png`。运行浏览器测试会生成 `artifacts/level-up.png`、`growth-health.png`、`artifacts/title.png`、`exploration.png`、`combat.png`、`melee-impact.png`、`monster-strike.png`、`monster-patrol.png`、`boss-warning.png`、`death.png`、`victory.png` 和 `desktop-small.png`。这些是生成的验证产物，不属于游戏运行所需资源。

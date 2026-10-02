@@ -184,7 +184,7 @@ function frame(now) {
     if (game.events.includes('upgrade') || game.events.includes('heal') || game.events.includes('hurt') || game.events.includes('growth')) updateUI();
   }
   if (game.events.some(event => ['dead','won','levelup'].includes(event))) { held.clear(); save(); updateUI(); }
-  for (const event of game.events) sound.play(event);
+  for (const event of game.events) sound.play(event,game.player.weapon);
   if (game.events.some(event => ['upgrade','heal','growth'].includes(event))) {
     $('toast').textContent = game.message; $('toast').hidden = false; toastRemaining = 2;
   }

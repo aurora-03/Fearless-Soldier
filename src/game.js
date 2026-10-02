@@ -176,19 +176,19 @@ export class Game {
     let chopped = 0, hits = 0;
     for (const c of cells) {
       const k = this.index(c.x, c.y);
-      if (this.tiles[k]) { this.tiles[k] = 0; this.stats.trees++; chopped++; this.effects.push({ ...c, text: '木屑', kind: 'wood', life: 0.45 }); }
+      if (this.tiles[k]) { this.tiles[k] = 0; this.stats.trees++; chopped++; this.effects.push({ ...c, text: '木屑', kind: 'wood', life: 0.45, duration: 0.45, direction: DIRECTIONS[this.player.facing] }); }
       for (const e of this.enemies) if (e.hp > 0 && e.x === c.x && e.y === c.y) {
         e.hp = Math.max(0, e.hp - damage); hits++;
         e.reaction = { remaining: 0.22, duration: 0.22, direction: DIRECTIONS[this.player.facing] };
-        this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28 });
-        this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55 });
+        this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28, direction: DIRECTIONS[this.player.facing] });
+        this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55, duration: 0.55 });
         if (!e.hp) this.kill(e);
       }
       if (this.boss.hp > 0 && this.boss.x === c.x && this.boss.y === c.y) {
         this.boss.hp = Math.max(0, this.boss.hp - damage); hits++;
         this.boss.reaction = { remaining: 0.22, duration: 0.22, direction: DIRECTIONS[this.player.facing] };
-        this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28 });
-        this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55 });
+        this.effects.push({ ...c, kind: 'spark', life: 0.28, duration: 0.28, direction: DIRECTIONS[this.player.facing] });
+        this.effects.push({ ...c, text: `−${damage}`, kind: 'hit', life: 0.55, duration: 0.55 });
         if (!this.boss.hp) { this.stats.kills++; this.gainExperience(PROGRESSION.xp.boss); this.status = 'won'; this.message = '森林重归宁静。你击败了荒野领主！'; this.events.push('won'); }
       }
     }
@@ -222,7 +222,7 @@ export class Game {
         const amount = Math.min(CONFIG.foodHeal, this.player.maxHp - this.player.hp);
         this.player.hp += amount;
         this.message = `吃掉食物，恢复 ${amount} 点生命。`;
-        this.effects.push({ x: i.x, y: i.y, text: `+${amount}`, kind: 'heal', life: 0.8 });
+        this.effects.push({ x: i.x, y: i.y, text: `+${amount}`, kind: 'heal', life: 0.8, duration: 0.8 });
         this.events.push('heal');
       } else if (i.level > this.player.weapon) {
         this.player.weapon = i.level;
@@ -288,7 +288,7 @@ export class Game {
           e.strike = { remaining: 0.24, duration: 0.24, dx: target.x - e.x, dy: target.y - e.y };
           this.effects.push({ x: e.x, y: e.y, target, type: e.type, kind: 'enemy-slash', life: 0.24, duration: 0.24 });
           if (e.windup.cells.some(c => c.x === this.player.x && c.y === this.player.y)) this.hurt(spec.damage);
-          this.effects.push(...e.windup.cells.map(c => ({ ...c, kind: 'blast', text: '', life: 0.2 })));
+          this.effects.push(...e.windup.cells.map(c => ({ ...c, kind: 'blast', text: '', life: 0.2, duration: 0.2 })));
           e.windup = null; e.cooldown = 0.65;
         }
         continue;
@@ -326,7 +326,7 @@ export class Game {
         b.strike = { remaining: 0.4, duration: 0.4, dx: 0, dy: 1 };
         this.effects.push({ x: b.x, y: b.y, kind: 'shockwave', life: 0.45, duration: 0.45 });
         if (b.windup.cells.some(c => c.x === this.player.x && c.y === this.player.y)) this.hurt(28);
-        this.effects.push(...b.windup.cells.map(c => ({ ...c, text: '', kind: 'blast', life: 0.32 })));
+        this.effects.push(...b.windup.cells.map(c => ({ ...c, text: '', kind: 'blast', life: 0.32, duration: 0.32 })));
         b.windup = null; b.cooldown = b.hp < b.maxHp * 0.4 ? 0.85 : 1.25;
       }
       return;

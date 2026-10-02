@@ -12,6 +12,8 @@ npm start
 
 打开 http://localhost:5173。可通过 `PORT=5174 npm start` 改端口。不要直接双击 HTML，浏览器需要 HTTP 来加载模块。
 
+角色采用各自独立的像素造型：装甲士兵、破衣僵尸、四足野狼、重装兽人和骨角领主。刀形、持握、地面拾取和装备图标使用同一绘制定义。
+
 画面铺满视口：士兵固定在正中心，地图平滑滚动；左上角为圆形探索地图，右下角为生命与装备。挥砍带刀光、受击动作和合成音效，可通过右上角音符按钮静音。
 
 普通怪物未发现士兵时也会在空地随机游走，发现后追击；脱战后恢复游走并保留血量。已有 v2 存档直接支持该行为。
@@ -39,4 +41,4 @@ npm run test:browser
 
 测试自动启动独立的 5174 端口服务；截图保存在 `artifacts/`。验证范围与结果见 [docs/VERIFICATION.md](docs/VERIFICATION.md)。
 
-产品规则见 [docs/PRD.md](docs/PRD.md)。逻辑与平衡配置在 `src/game.js`，像素绘制在 `src/render.js`，UI、输入与存档在 `src/main.js`，合成音效在 `src/audio.js`。
+产品规则见 [docs/PRD.md](docs/PRD.md)。逻辑与平衡配置在 `src/game.js`，角色与武器造型在 `src/art.js`，场景、动作与粒子效果在 `src/render.js`，UI、输入与存档在 `src/main.js`，合成音效在 `src/audio.js`。

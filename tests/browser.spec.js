@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
 const KEY = 'fearless-soldier.save.v2';
 async function fixture(page, kind) {
@@ -38,6 +39,12 @@ async function fixture(page, kind) {
       if(kind==='growthdeath'){g.gainExperience(60);g.chooseUpgrade('health');g.player.hp=10;g.enemies[0].hp=45;g.enemies[0].active=true;g.enemies[0].cooldown=0;}
     }
     if(kind==='multigrowth'){g.enemies=[];g.items=[];g.gainExperience(220);}
+    if(kind==='artshowcase'){
+      g.rectangle(43,44,13,13);g.player.weapon=1;g.player.facing='down';
+      g.boss.x=46;g.boss.y=52;g.boss.active=false;
+      g.enemies=[{id:0,x:48,y:49,type:'zombie',hp:45,active:false,cooldown:99,windup:null},{id:1,x:52,y:49,type:'wolf',hp:30,active:false,cooldown:99,windup:null},{id:2,x:52,y:51,type:'orc',hp:100,active:false,cooldown:99,windup:null}];
+      g.items=[{x:49,y:52,type:'weapon',level:1},{x:51,y:52,type:'weapon',level:2},{x:49,y:49,type:'food'}];
+    }
     localStorage.setItem(key, g.serialize());
   }, { key: KEY, kind });
   await page.reload();
@@ -319,4 +326,40 @@ test('death removes run growth and restart begins with base health, level and sp
   expect(await page.evaluate(key=>localStorage.getItem(key),KEY)).toBeNull();
   await page.getByRole('button',{name:'再次出发'}).click();await expect(page.locator('#level-badge')).toHaveText('LV.1');
   await expect(page.locator('#xp-value')).toHaveText('0 / 60');await expect(page.locator('#health-value')).toHaveText('100 / 100');await expect(page.locator('#attack-rate')).toHaveText('攻速 4.17 次/秒');
+});
+
+test('character species have independent silhouettes, shaded materials and directional poses',async({page})=>{
+  await page.goto('/');
+  const result=await page.evaluate(async()=>{
+    const {sprite,paintWeapon}=await import('/src/art.js');
+    const types=['soldier','zombie','wolf','orc','boss'],names=['士兵','僵尸','野狼','兽人','荒野领主'];
+    const summaries=types.map(type=>{
+      const c=document.createElement('canvas');c.width=96;c.height=96;const ctx=c.getContext('2d');
+      const sample=(facing,flash)=>{ctx.clearRect(0,0,96,96);sprite(ctx,0,0,6,type,facing,0,flash);const data=ctx.getImageData(0,0,96,96).data;let mask='',opaque=0,fingerprint=2166136261;const colors=new Set();for(let i=0;i<data.length;i+=4){mask+=data[i+3]>100?'1':'0';for(let j=0;j<4;j++)fingerprint=Math.imul(fingerprint^data[i+j],16777619)>>>0;if(data[i+3]>200){opaque++;colors.add(`${data[i]},${data[i+1]},${data[i+2]}`);}}return {mask,opaque,colors:colors.size,fingerprint};};
+      return {type,front:sample('down',false),back:sample('up',false),flash:sample('down',true)};
+    });
+    const gallery=document.createElement('canvas');gallery.width=960;gallery.height=680;const ctx=gallery.getContext('2d');ctx.fillStyle='#13231e';ctx.fillRect(0,0,960,680);ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle='#d8be82';ctx.font='bold 18px system-ui';ctx.fillText('FEARLESS SOLDIER · 角色与武器造型',28,35);
+    for(let i=0;i<5;i++){
+      const x=120+i*180;ctx.fillStyle='#b8c7ac';ctx.font='14px system-ui';ctx.textAlign='center';ctx.fillText(names[i],x,70);
+      for(let row=0;row<3;row++){const y=142+row*154;ctx.fillStyle='#20372c';ctx.fillRect(x-60,y-58,120,116);sprite(ctx,x-48,y-48,6,types[i],row===1?'right':'down',row===1?.19:0,false,row===2?{strike:.8,swing:.45,windup:.8}:{});}
+    }
+    ctx.textAlign='left';ctx.font='11px system-ui';ctx.fillStyle='#8caa91';ctx.fillText('正面',28,94);ctx.fillText('游走侧面',28,248);ctx.fillText('攻击姿态',28,402);
+    const labels=['野战小刀','精钢长刀','破军大剑','兽人砍刀','领主重锤'];
+    for(let i=0;i<5;i++){const x=120+i*180;ctx.fillStyle='#20372c';ctx.fillRect(x-60,530,120,115);ctx.save();ctx.translate(x,588);ctx.rotate(-Math.PI/4);paintWeapon(ctx,-18,0,2,i<3?['knife','saber','greatsword'][i]:i===3?'cleaver':'hammer');ctx.restore();ctx.textAlign='center';ctx.fillStyle='#c3c7ab';ctx.font='12px system-ui';ctx.fillText(labels[i],x,661);}
+    return {summaries,png:gallery.toDataURL('image/png')};
+  });
+  expect(new Set(result.summaries.map(s=>s.front.mask)).size).toBe(5);
+  for(const s of result.summaries){expect(s.front.opaque).toBeGreaterThan(1000);expect(s.front.colors).toBeGreaterThan(10);expect(s.flash.mask).toBe(s.front.mask);expect(s.flash.colors).toBeGreaterThan(10);expect(s.back.fingerprint).not.toBe(s.front.fingerprint);}
+  await writeFile('artifacts/model-gallery.png',Buffer.from(result.png.split(',')[1],'base64'));
+});
+
+test('new character and weapon art renders together in the actual full-screen world',async({page})=>{
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await fixture(page,'artshowcase');await page.keyboard.press('Escape');
+  await page.addStyleTag({content:'#overlay{display:none!important}'});
+  await page.screenshot({path:'artifacts/art-showcase.png'});
+  const save=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),KEY);
+  expect(save.enemies.map(e=>e.type).sort()).toEqual(['orc','wolf','zombie']);expect(save.boss.hp).toBe(620);
+  expect(errors).toEqual([]);
 });
